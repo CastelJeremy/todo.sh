@@ -9,25 +9,25 @@ RESET="\e[0m"
 COLOR="\e[49;38;5;81m"
 
 parse_task() {
-	done=`echo $2 | cut -c 1`
-	str=`echo $2 | cut -c 2-`
-	if [ "$done" = "1" ]; then
-		str="${STRIKE}${str}${RESET}"
-	fi
+    done=`echo $2 | cut -c 1`
+    str=`echo $2 | cut -c 2-`
+    if [ "$done" = "1" ]; then
+        str="${STRIKE}${str}${RESET}"
+    fi
 
-	if [ $1 -lt 10 ]; then
-		echo -e "${COLOR}0${i}${RESET} $str"
-	else
-		echo -e "${COLOR}$i${RESET} $str"
-	fi
+    if [ $1 -lt 10 ]; then
+        echo -e "${COLOR}0${i}${RESET} $str"
+    else
+        echo -e "${COLOR}$i${RESET} $str"
+    fi
 }
 
 list_tasks() {
-	i=0;
-	cat $TODOSH_DATA_FILE | while read line; do
-		i=$((i+1))
+    i=0;
+    cat $TODOSH_DATA_FILE | while read line; do
+        i=$((i+1))
         parse_task $i "$line"
-	done
+    done
 }
 
 show_error() {
@@ -52,7 +52,7 @@ if [ "$1" = "a" ] || [ "$1" = "-a" ] || [ "$1" = "--add" ]; then
         show_error "missing content operand after '$1'"
         exit
     fi
-	echo "0$2" >> $TODOSH_DATA_FILE
+    echo "0$2" >> $TODOSH_DATA_FILE
 elif [ "$1" = "r" ] || [ "$1" = "-rm" ] || [ "$1" = "--remove" ]; then
     if [ $# -lt 2 ]; then
         show_error "missing number operand after '$1'"
@@ -62,7 +62,10 @@ elif [ "$1" = "r" ] || [ "$1" = "-rm" ] || [ "$1" = "--remove" ]; then
         exit
     fi
 
-	sed -i "$2d" $TODOSH_DATA_FILE
+    {
+        printf '%dd\n' "$2"
+        printf '%s\n' w q
+    } | ed -s $TODOSH_DATA_FILE
 elif [ "$1" = "u" ] || [ "$1" = "-u" ] || [ "$1" = "--update" ]; then
     if [ $# -lt 2 ]; then
         show_error "missing number operand after '$1'"
@@ -72,12 +75,22 @@ elif [ "$1" = "u" ] || [ "$1" = "-u" ] || [ "$1" = "--update" ]; then
         exit
     fi
 
-    done=`sed "$2!d" $TODOSH_DATA_FILE | cut -c 1`
+    line=`sed -n $2p $TODOSH_DATA_FILE`
+    done=`echo $line | cut -c 1`
+    clean_line=`echo $line | cut -c 2-`
 
     if [ "$done" = "0" ]; then
-        sed -i "$2s/0\(.*\)/1\1/" $TODOSH_DATA_FILE
+        {
+            printf '%dc\n' "$2"
+            printf '1%s\n.\n' "$clean_line"
+            printf '%s\n' w q
+        } | ed -s $TODOSH_DATA_FILE
     elif [ "$done" = "1" ]; then
-        sed -i "$2s/1\(.*\)/0\1/" $TODOSH_DATA_FILE
+        {
+            printf '%dc\n' "$2"
+            printf '0%s\n.\n' "$clean_line"
+            printf '%s\n' w q
+        } | ed -s $TODOSH_DATA_FILE
     fi
 elif [ "$1" = "s" ] || [ "$1" = "-s" ] || [ "$1" = "--switch" ]; then
     if [ $# -lt 3 ]; then
@@ -91,10 +104,11 @@ elif [ "$1" = "s" ] || [ "$1" = "-s" ] || [ "$1" = "--switch" ]; then
         exit
     fi
 
-    a=`sed "$2!d" $TODOSH_DATA_FILE`
-    b=`sed "$3!d" $TODOSH_DATA_FILE`
-    sed -i "$3s/.*/$a/" $TODOSH_DATA_FILE
-    sed -i "$2s/.*/$b/" $TODOSH_DATA_FILE
+    {
+        printf '%dm%d\n' "$2" "$3"
+        printf '%d-m%d-\n' "$3" "$2"
+        printf '%s\n' w q
+    } | ed -s $TODOSH_DATA_FILE
 elif [ "$1" = "h" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "Help section todo"
     exit
