@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <getopt.h>
 
+#define PROGRAM_NAME "todo"
+
 #define STYLE_RESET  "\e[0m"
 #define COLOR_CYAN   "\e[49;38;5;81m"
 #define FONT_STRIKE  "\e[9m"
@@ -25,7 +27,8 @@ typedef struct task {
  *  -2 on file format error
  *  -3 on file format error
  */
-int read_tasks(char* filename, Task* tasks, int* tasks_size) {
+static int
+read_tasks(char* filename, Task* tasks, int* tasks_size) {
     FILE *f;
 
     f = fopen(filename, "r");
@@ -71,7 +74,8 @@ int read_tasks(char* filename, Task* tasks, int* tasks_size) {
     return 0;
 }
 
-int print_tasks(Task* tasks, int tasks_size) {
+static int
+print_tasks(Task* tasks, int tasks_size) {
     for (int i = 0; i < tasks_size; i++) {
         printf(COLOR_CYAN);
 
@@ -91,7 +95,77 @@ int print_tasks(Task* tasks, int tasks_size) {
     return 0;
 }
 
-int main() {
+static inline void
+do_add (char* label, Task* tasks, int* tasks_size) {
+    Task task;
+    task.check = false;
+    strncpy(task.label, label, LABEL_LIMIT - 1);
+
+    tasks[(*tasks_size)++] = task;
+}
+
+static inline void
+do_update (int index, Task* tasks) {
+    tasks[index - 1].check = !tasks[index - 1].check;
+}
+
+// From coreutils/system.h
+static inline void
+emit_try_help (void)
+{
+  fprintf (stderr, "Try '%s --help' for more information.\n", PROGRAM_NAME);
+}
+
+void
+error (char* msg)
+{
+    fprintf (stderr, "%s: %s\n", PROGRAM_NAME, msg);
+}
+
+void
+dir (char* msg)
+{
+    error (msg);
+    exit (EXIT_FAILURE);
+}
+
+void
+usage (int status)
+{
+    if (status != EXIT_SUCCESS) {
+        emit_try_help ();
+    } else {
+        printf ("\
+Usage: %s [OPTION]...\n\
+", PROGRAM_NAME);
+    }
+
+    exit (status);
+}
+
+struct
+todo_options {
+    char** add_list;
+    int    add_list_size;
+    int*   update_index_list;
+    int    update_index_list_size;
+    int*   mv_src_index_list;
+    int    mv_src_index_list_size;
+    int*   mv_dest_index_list;
+    int    mv_dest_index_list_size;
+};
+
+static inline void
+todo_options_init (struct todo_options *x)
+{
+    x->add_list = malloc(32);
+    x->add_list_size = 0;
+    x->update_index_list = malloc(32 * sizeof(int));
+    x->update_index_list_size = 0;
+}
+
+int
+main(int argc, char** argv) {
     Task tasks[TASKS_LIMIT];
     int tasks_size = 0;
 
@@ -109,10 +183,62 @@ int main() {
             printf("Unknown error %i\n", r);
         }
 
-        return EXIT_FAILURE;
+        exit (EXIT_FAILURE);
+    }
+
+    struct todo_options x;
+
+    todo_options_init (&x);
+
+    struct option options[] = {
+        { "add",    required_argument, NULL, 'a' },
+        { "update", required_argument, NULL, 'u' },
+        { "help",   no_argument,       NULL, 'h' }
+    };
+
+    char opt;
+    while ((opt = getopt_long(argc, argv, "a:u:h", options, NULL)) != -1) {
+        switch (opt) {
+            case 'a':
+                if (x.add_list_size + 1 <= 32) {
+                    if (strlen(optarg) < LABEL_LIMIT) {
+                        x.add_list[x.add_list_size++] = optarg;
+                    } else {
+                        error ("argument exceeds the limit");
+                        usage (EXIT_FAILURE);
+                    }
+                } else {
+                    error ("too many options");
+                    usage (EXIT_FAILURE);
+                }
+                break;
+            case 'u':
+                if (x.update_index_list_size + 1 <= 32) {
+                    x.update_index_list[x.update_index_list_size++] = atoi(optarg);
+                } else {
+                    error ("too many options");
+                    usage (EXIT_FAILURE);
+                }
+                break;
+            case 'h':
+                usage (EXIT_SUCCESS);
+                break;
+            case ':':
+            case '?':
+                usage (EXIT_FAILURE);
+                break;
+        }
+    }
+
+    for (int i = 0; i < x.add_list_size; i++) {
+        do_add (x.add_list[i], tasks, &tasks_size);
+    }
+
+    for (int i = 0; i < x.update_index_list_size; i++) {
+        do_update (x.update_index_list[i], tasks);
     }
 
     print_tasks(tasks, tasks_size);
 
-    return EXIT_SUCCESS;
+    exit (EXIT_SUCCESS);
 }
