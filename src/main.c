@@ -95,6 +95,22 @@ print_tasks(Task* tasks, int tasks_size) {
     return 0;
 }
 
+static inline int
+write_tasks(char* filename, Task* tasks, int tasks_size)
+{
+    FILE* f;
+
+    f = fopen(filename, "w");
+
+    for (int i = 0; i < tasks_size; i++) {
+        fprintf(f, "%i%s\n", tasks[i].check, tasks[i].label);
+    }
+
+    fclose(f);
+
+    return (0);
+}
+
 static inline void
 do_add (char* label, Task* tasks, int* tasks_size) {
     Task task;
@@ -107,6 +123,19 @@ do_add (char* label, Task* tasks, int* tasks_size) {
 static inline void
 do_update (int index, Task* tasks) {
     tasks[index - 1].check = !tasks[index - 1].check;
+}
+
+static inline void
+do_delete (int index, Task* tasks, int* tasks_size) {
+    if (index == *tasks_size) {
+        (*tasks_size)--;
+    } else {
+        for (int i = index; i < *tasks_size; i++) {
+            tasks[i - 1] = tasks[i];
+        }
+
+        (*tasks_size)--;
+    }
 }
 
 // From coreutils/system.h
@@ -149,6 +178,8 @@ todo_options {
     int    add_list_size;
     int*   update_index_list;
     int    update_index_list_size;
+    int*   delete_index_list;
+    int    delete_index_list_size;
     int*   mv_src_index_list;
     int    mv_src_index_list_size;
     int*   mv_dest_index_list;
@@ -162,6 +193,8 @@ todo_options_init (struct todo_options *x)
     x->add_list_size = 0;
     x->update_index_list = malloc(32 * sizeof(int));
     x->update_index_list_size = 0;
+    x->delete_index_list = malloc(32 * sizeof(int));
+    x->delete_index_list_size = 0;
 }
 
 int
@@ -193,11 +226,12 @@ main(int argc, char** argv) {
     struct option options[] = {
         { "add",    required_argument, NULL, 'a' },
         { "update", required_argument, NULL, 'u' },
+        { "delete", required_argument, NULL, 'd' },
         { "help",   no_argument,       NULL, 'h' }
     };
 
     char opt;
-    while ((opt = getopt_long(argc, argv, "a:u:h", options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "a:u:d:h", options, NULL)) != -1) {
         switch (opt) {
             case 'a':
                 if (x.add_list_size + 1 <= 32) {
@@ -215,6 +249,14 @@ main(int argc, char** argv) {
             case 'u':
                 if (x.update_index_list_size + 1 <= 32) {
                     x.update_index_list[x.update_index_list_size++] = atoi(optarg);
+                } else {
+                    error ("too many options");
+                    usage (EXIT_FAILURE);
+                }
+                break;
+            case 'd':
+                if (x.delete_index_list_size + 1 <= 32) {
+                    x.delete_index_list[x.delete_index_list_size++] = atoi(optarg);
                 } else {
                     error ("too many options");
                     usage (EXIT_FAILURE);
@@ -238,7 +280,13 @@ main(int argc, char** argv) {
         do_update (x.update_index_list[i], tasks);
     }
 
+    for (int i = 0; i < x.delete_index_list_size; i++) {
+        do_delete (x.delete_index_list[i], tasks, &tasks_size);
+    }
+
     print_tasks(tasks, tasks_size);
+
+    write_tasks("/tmp/todo.txt", tasks, tasks_size);
 
     exit (EXIT_SUCCESS);
 }
